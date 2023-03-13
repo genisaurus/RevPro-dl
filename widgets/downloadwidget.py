@@ -106,6 +106,7 @@ class DownloadWidget(QWidget):
         self.start_button.clicked.connect(self.on_start)
         self.cancel_button = QPushButton("Cancel")
         self.cancel_button.setEnabled(False)
+        self.cancel_button.clicked.connect(self.on_cancel)
         self.new_week_button = QPushButton("New Week")
         self.new_week_button.clicked.connect(self.return_to_curriculum)
         self.button_bar = QHBoxLayout()
@@ -229,6 +230,22 @@ class DownloadWidget(QWidget):
     ###########################################################################
 
     @Slot()
+    def on_cancel(self):
+        """ delete last reply and close file buffer """
+        self.downloaded = 0
+        self.downloaded_label.setNum(self.downloaded)
+        self.progress_bar.setRange(0,1)
+        
+        for k, t in self.threads.items():
+            t.terminate()
+
+        self.threads = {}
+
+        self.start_button.setDisabled(False)
+        self.cancel_button.setDisabled(True)
+    ###########################################################################
+
+    @Slot()
     def return_to_curriculum(self):
         """ Redirects browser to curriculum URL """
         for checkbox in self.day_selector_group.buttons():
@@ -248,6 +265,7 @@ class DownloadWidget(QWidget):
         """ invoked when the user clicks the start button """
 
         self.start_button.setDisabled(True)
+        self.start_button.setDisabled(False)
         self.progress_bar.setRange(0,1)
 
         # check if Week folder exists in DL location, and if not, create it
@@ -289,12 +307,17 @@ class DownloadWidget(QWidget):
         self.progress_bar.setValue(current_val + new_bytes)
     ###########################################################################
 
+    @Slot(str)
     def on_finish_dl(self, dest_filename):
         """ delete last reply and close file buffer """
         self.downloaded += 1
         self.downloaded_label.setNum(self.downloaded)
 
+        self.threads.pop(dest_filename)
+
         if self.downloaded == self.to_download:
             self.start_button.setDisabled(False)
             self.progress_bar.setValue(self.progress_bar.maximum())
     ###########################################################################
+
+    
