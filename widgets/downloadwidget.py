@@ -12,18 +12,18 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QLabel,
     QTreeWidget,
-    QTreeWidgetItem,
+    QTreeWidgetItem
 )
-from PySide6.QtCore import QStandardPaths, QUrl, QFile, QSaveFile, QDir, QIODevice, Slot
-from PySide6.QtNetwork import QNetworkReply, QNetworkRequest, QNetworkAccessManager
+from PySide6.QtCore import QStandardPaths, QDir, Slot
+from PySide6.QtNetwork import QNetworkAccessManager
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.select import Select
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import time
-import sys
-import os
+from typing import Dict
+from widgets.downloaderthread import DownloaderThread
+
 
 class DownloadWidget(QWidget):
 
@@ -75,12 +75,20 @@ class DownloadWidget(QWidget):
             self.day_selector_container.addWidget(self.day_checkboxes[i])
 
         # Setup progress bar
+        self.downloaded = 0
+        self.to_download = 0
         self.progress_container = QHBoxLayout()
         self.progress_bar = QProgressBar()
         self.progress_label = QLabel("Download Progress:")
         self.progress_label.setBuddy(self.progress_bar)
+        self.downloaded_label = QLabel("0")
+        self.separator_label = QLabel("/")
+        self.to_download_label = QLabel("0")
         self.progress_container.addWidget(self.progress_label)
         self.progress_container.addWidget(self.progress_bar)
+        self.progress_container.addWidget(self.downloaded_label)
+        self.progress_container.addWidget(self.separator_label)
+        self.progress_container.addWidget(self.to_download_label)
 
         # Setup file tree preview
         self.file_tree_container = QVBoxLayout()
@@ -89,13 +97,13 @@ class DownloadWidget(QWidget):
         self.file_tree.setHeaderLabels(["Recording", "URL"])
         self.file_tree_container.addWidget(self.file_tree)
 
-        # Setup Network/File handlers
+        # Setup network handlers
         self.manager = QNetworkAccessManager(self)
-        self.current_file = None
-        self.last_reply = None
+        self.threads: Dict[str, DownloaderThread] = {}
 
         # Setup button bar
         self.start_button = QPushButton("Start")
+        self.start_button.clicked.connect(self.on_start)
         self.cancel_button = QPushButton("Cancel")
         self.cancel_button.setEnabled(False)
         self.new_week_button = QPushButton("New Week")
@@ -160,15 +168,19 @@ class DownloadWidget(QWidget):
         # If the current day is unchecked, remove the day from the file tree
         if not self.day_selector_group.button(button_id).isChecked():
             days = self.file_tree.topLevelItem(0).childCount()
-            print("days in tree: " + str(days))
             for i in range(days):
                 day = self.file_tree.topLevelItem(0).child(i)
-                print("day text: " + day.text(0))
                 if day.text(0) == self.day_selector_group.button(button_id).text():
+                    self.to_download -= day.childCount()
+                    self.to_download_label.setNum(self.to_download)
                     self.file_tree.topLevelItem(0).removeChild(day)
                     break
             self.repaint()
             return
+        
+        # reset the downloaded count
+        self.downloaded = 0
+        self.downloaded_label.setNum(self.downloaded)
         
         day_element_list = self.driver.find_elements(By.CSS_SELECTOR, "#activitySideNav > div > div.panel-body.list-group > ul > div > div > h4")
 
@@ -178,7 +190,7 @@ class DownloadWidget(QWidget):
                 day.click()
         day_element = day_element_list[button_id]
 
-        # Add the checked day and all its recordings to the tree
+        # create a day item for the tree, will hold recordings as children
         day_tree_item = QTreeWidgetItem([self.day_selector_group.button(button_id).text()], 0)
 
         # click the day in RevPro. Wait until the recordings dropdown loads 
@@ -192,9 +204,7 @@ class DownloadWidget(QWidget):
         count = len(self.driver.find_elements(By.CSS_SELECTOR, ".select2-results > li"))
         # close the dropdown so it can be reopened for each iteration
         self.driver.find_element(By.CSS_SELECTOR, "#s2id_recordings-drop-down").click()
-        print("recordings: " + str(count))
         for j in range(count):
-            print("recording " + str(j))
             # ensure the dropdown is expanded, make sure list elements are visible
             WebDriverWait(self.driver,2).until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#s2id_recordings-drop-down")))
             self.driver.find_element(By.CSS_SELECTOR, "#s2id_recordings-drop-down").click()
@@ -203,33 +213,88 @@ class DownloadWidget(QWidget):
             # grab the <li> elements, extract the name of the current recording, and then click it to load the recording video
             WebDriverWait(self.driver,10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "ul[id^=\"select2-results\"] > li")))
             recording_list = self.driver.find_elements(By.CSS_SELECTOR, "ul[id^=\"select2-results\"] > li")
-            print("recordings found in list: " + str(len(recording_list)))
             recording_item_str = recording_list[j].find_element(By.CSS_SELECTOR, ".select2-result-label").text
-            print(recording_item_str)
             recording_list[j].click()
             # wait for the video player to load, then extract the URL. Add the recording item to the file tree
             WebDriverWait(self.driver,60).until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#recordingPlayer_html5_api")))
             recording_url = self.driver.find_element(By.CSS_SELECTOR, "#recordingPlayer_html5_api > source").get_attribute("ng-src")
-            recording_tree_item = QTreeWidgetItem([recording_item_str, recording_url], 0)
+            recording_tree_item = QTreeWidgetItem([recording_item_str.replace(':', '_').replace('/', '_') + ".mp4", recording_url], 0)
             day_tree_item.addChild(recording_tree_item)
+        self.to_download += day_tree_item.childCount()
+        self.to_download_label.setNum(self.to_download)
         week_item.addChild(day_tree_item)
         
         self.file_tree.expandAll()
 
     ###########################################################################
 
-    @Slot(int, int)
-    def on_progress(self, bytesReceived: int, bytesTotal: int):
-        """ Updates progress bar"""
-        self.progress_bar.setRange(0, bytesTotal)
-        self.progress_bar.setValue(bytesReceived)
-    ###########################################################################
-
-    @Slot(int, int)
+    @Slot()
     def return_to_curriculum(self):
         """ Redirects browser to curriculum URL """
         for checkbox in self.day_selector_group.buttons():
             checkbox.setChecked(False)
+        self.downloaded = 0
+        self.downloaded_label.setNum(self.downloaded)
+        self.to_download = 0
+        self.to_download_label.setNum(self.to_download)
+        self.progress_bar.setRange(0,1)
         self.file_tree.clear()
+        self.threads = {}
         self.driver.get(self.curriculum_url)
+    ###########################################################################
+
+    @Slot()
+    def on_start(self):
+        """ invoked when the user clicks the start button """
+
+        self.start_button.setDisabled(True)
+        self.progress_bar.setRange(0,1)
+
+        # check if Week folder exists in DL location, and if not, create it
+        week_dir = QDir(QDir.fromNativeSeparators(self.dl_location_box.text().strip() + "/" + self.file_tree.topLevelItem(0).text(0)))
+        if not week_dir.exists():
+            week_dir.mkpath(".")
+
+        # iterate over selected days, create day folder if needed
+        days = self.file_tree.topLevelItem(0).childCount()
+        for i in range(days):
+            day = self.file_tree.topLevelItem(0).child(i)
+            day_dir = QDir(QDir.fromNativeSeparators(week_dir.absolutePath() + "/" + day.text(0)))
+            if not day_dir.exists():
+                day_dir.mkpath(".")
+            recordings = day.childCount()
+            # iterate over all recordings for a day, and download them
+            for j in range(recordings):
+                recording = day.child(j)
+                dest_filename = recording.text(0)
+                dest_url = recording.text(1)
+                dest_file = day_dir.filePath(dest_filename)
+                
+                self.threads[dest_filename] = DownloaderThread(dest_url, dest_file, dest_filename)
+                self.threads[dest_filename].add_total_progress.connect(self.update_progress_max)
+                self.threads[dest_filename].add_current_progress.connect(self.update_progress)
+                self.threads[dest_filename].thread_complete.connect(self.on_finish_dl)
+                self.threads[dest_filename].start()
+    ###########################################################################
+
+    @Slot(int)
+    def update_progress_max(self, filesize: int):
+        current_max = self.progress_bar.maximum()
+        self.progress_bar.setMaximum(current_max + filesize)
+    ###########################################################################
+
+    @Slot(int)
+    def update_progress(self, new_bytes: int):
+        current_val = self.progress_bar.value()
+        self.progress_bar.setValue(current_val + new_bytes)
+    ###########################################################################
+
+    def on_finish_dl(self, dest_filename):
+        """ delete last reply and close file buffer """
+        self.downloaded += 1
+        self.downloaded_label.setNum(self.downloaded)
+
+        if self.downloaded == self.to_download:
+            self.start_button.setDisabled(False)
+            self.progress_bar.setValue(self.progress_bar.maximum())
     ###########################################################################
