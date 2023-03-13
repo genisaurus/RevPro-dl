@@ -12,19 +12,35 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QLabel,
     QTreeWidget,
-    QTreeWidgetItem
+    QTreeWidgetItem,
 )
 from PySide6.QtCore import QStandardPaths, QUrl, QFile, QSaveFile, QDir, QIODevice, Slot
 from PySide6.QtNetwork import QNetworkReply, QNetworkRequest, QNetworkAccessManager
-from PySide6.QtGui import QIcon
+from selenium import webdriver
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
 import sys
 import os
 
 class DownloadWidget(QWidget):
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
         self.setWindowTitle("RevaturePro Cohort Recording Scraper")
+
+        # Setup Instructions Box
+        self.instructions_container = QVBoxLayout()
+        self.instructions_label = QLabel(
+            """Instructions:
+                1. Log into RevaturePro using the opened Chrome window.
+                2. Select the curriculum you wish to scrape from
+                3. Select the week to scrape (this must be done individually)
+                4. In the GUI, select your download location
+                5. Check each day in the current week you would like to scrape recordings from
+                6. Click start!""")
+        self.instructions_container.addWidget(self.instructions_label)
 
         # Setup download location Box
         self.dl_location_box = QLineEdit()
@@ -66,7 +82,8 @@ class DownloadWidget(QWidget):
         # Setup file tree preview
         self.file_tree_container = QVBoxLayout()
         self.file_tree = QTreeWidget()
-        self.file_tree.setHeaderLabel("File Tree")
+        self.file_tree.setColumnCount(2)
+        self.file_tree.setHeaderLabels(["Recording", "URL"])
         self.file_tree_container.addWidget(self.file_tree)
 
         # Setup Network/File handlers
@@ -85,6 +102,7 @@ class DownloadWidget(QWidget):
         
         # Setup main layout
         self.main_container = QVBoxLayout(self)
+        self.main_container.addLayout(self.instructions_container)
         self.main_container.addLayout(self.dl_container)
         self.main_container.addLayout(self.day_selector_container)
         self.main_container.addLayout(self.file_tree_container)
@@ -95,8 +113,19 @@ class DownloadWidget(QWidget):
         self.resize(401, 480)
     ###########################################################################
 
+    @property
+    def driver(self):
+        """ selenium webdriver instance """
+        return self._driver
+    
+    @driver.setter
+    def driver(self, value):
+        self._driver = value
+    ###########################################################################
+
     @Slot()
     def on_select_location(self):
+        """ Invoked when the user opens the Select Download Location dialog """
 
         dir_path = QFileDialog.getExistingDirectory(
             self, "Open Directory", QDir.homePath(), QFileDialog.ShowDirsOnly
@@ -105,12 +134,22 @@ class DownloadWidget(QWidget):
         if dir_path:
             dest_dir = QDir(dir_path)
             self.dl_location_box.setText(QDir.fromNativeSeparators(dest_dir.path()))
+            # When the download location is changed, we want to clear the day selections and file tree
             for checkbox in self.day_selector_group.buttons():
                 checkbox.setChecked(False)
             self.file_tree.clear()
             self.file_tree.addTopLevelItem(QTreeWidgetItem([dest_dir.dirName()], QTreeWidgetItem.ItemType.Type))
-
+    ###########################################################################
 
     @Slot()
     def on_select_day(self):
+        """ Invoked whenever a user toggles a checkbox """
         print("placeholder - will update file tree")
+    ###########################################################################
+
+    @Slot(int, int)
+    def on_progress(self, bytesReceived: int, bytesTotal: int):
+        """ Updates progress bar"""
+        self.progress_bar.setRange(0, bytesTotal)
+        self.progress_bar.setValue(bytesReceived)
+    ###########################################################################
