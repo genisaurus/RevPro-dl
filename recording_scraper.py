@@ -1,10 +1,11 @@
 from PySide6.QtWidgets import QApplication
-from widgets.downloadwidget import DownloadWidget
+from widgets.bootstrapwidget import BootstrapWidget
 
-def main():
+def main():    
+
     app = QApplication([])
 
-    window = DownloadWidget()
+    window = BootstrapWidget()
     window.show()
 
     app.exec()
