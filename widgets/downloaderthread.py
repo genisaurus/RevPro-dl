@@ -1,5 +1,6 @@
-from PySide6.QtCore import QFile, QSaveFile, QIODevice, Signal, QThread
+from PySide6.QtCore import QFile, QSaveFile, QIODevice, Signal, QThread, Slot
 from urllib.request import urlopen
+from urllib.error import URLError, HTTPError, ContentTooShortError
 
 class DownloaderThread(QThread):
 
@@ -16,6 +17,7 @@ class DownloaderThread(QThread):
         self.file = file
         self.name = name
         self.buffer: QSaveFile = None
+
     ###########################################################################
 
     def run(self):
@@ -30,20 +32,37 @@ class DownloaderThread(QThread):
             # HTTP GET
             chunk_size = 1024
             kb = 1024
-            with urlopen(self.url) as resp:
-                self.add_total_progress.emit(int(resp.info()["Content-Length"])/kb)
-                while True:
-                    chunk = resp.read(chunk_size)
-                    if chunk is None:
-                        continue
-                    elif chunk == b"":
-                        break
-                    self.buffer.write(chunk)
-                    self.add_current_progress.emit(chunk_size/kb) # sending progress in kb to not overflow the progress bar
-            self.buffer.commit()
-            self.thread_complete.emit(self.name)
+            try:
+                with urlopen(self.url) as resp:
+                    self.add_total_progress.emit(int(resp.info()["Content-Length"])/kb)
+                    while True:
+                        chunk = resp.read(chunk_size)
+                        if chunk is None:
+                            continue
+                        elif chunk == b"":
+                            break
+                        self.buffer.write(chunk)
+                        self.add_current_progress.emit(chunk_size/kb) # sending progress in kb to not overflow the progress bar
+                self.buffer.commit()
+            except HTTPError as e:
+                print(f"QThread {self.name} encountered an HTTPError ({e.code}) in creating the request")
+                print(f"Headers:\n{e.headers}\n")
+                print(e.reason)
+            except ContentTooShortError as e:
+                print(f"QThread {self.name} encountered a ContentTooShortError in reading the response")
+                print(f"Truncated Data:\n{e.content}\n")
+                print(e.reason) 
+            except URLError as e:
+                print(f"QThread {self.name} encountered a URLError in creating the request")
+                print(e.reason)           
         else:
             error = self.buffer.errorString()
             print(f"Cannot open device: {error}")
+        self.thread_complete.emit(self.name)
 
     ###########################################################################
+
+    @Slot()
+    def terminate(self):
+        print(f"QThread {self.name} terminated")
+        super().terminate()

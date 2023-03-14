@@ -265,7 +265,7 @@ class DownloadWidget(QWidget):
         """ invoked when the user clicks the start button """
 
         self.start_button.setDisabled(True)
-        self.start_button.setDisabled(False)
+        self.cancel_button.setDisabled(False)
         self.progress_bar.setRange(0,1)
 
         # check if Week folder exists in DL location, and if not, create it
@@ -313,10 +313,11 @@ class DownloadWidget(QWidget):
         self.downloaded += 1
         self.downloaded_label.setNum(self.downloaded)
 
-        self.threads.pop(dest_filename)
+        self.threads.pop(dest_filename).deleteLater()
 
         if self.downloaded == self.to_download:
             self.start_button.setDisabled(False)
+            self.cancel_button.setDisabled(True)
             self.progress_bar.setValue(self.progress_bar.maximum())
     ###########################################################################
 

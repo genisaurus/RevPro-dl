@@ -53,7 +53,7 @@ class BootstrapWidget(QWidget):
         WebDriverWait(self.driver, 600).until(EC.title_contains("Dashboard"))
         self.driver.get("http://app.revature.com/curricula")
         wait = WebDriverWait(self.driver, 600).until(EC.url_contains("curriculum"))
-        time.sleep(1)
+        WebDriverWait(self.driver, 3).until(EC.element_to_be_clickable(By.CSS_SELECTOR, "button.fc-detailedView-button"))
         detailed_view_button = self.driver.find_element(By.CSS_SELECTOR, "button.fc-detailedView-button")
         detailed_view_button.click()
         self.scraper_window = DownloadWidget(self.driver)
