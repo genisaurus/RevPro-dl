@@ -243,6 +243,7 @@ class DownloadWidget(QWidget):
 
         self.start_button.setDisabled(False)
         self.cancel_button.setDisabled(True)
+        self.new_week_button.setDisabled(False)
     ###########################################################################
 
     @Slot()
@@ -266,6 +267,7 @@ class DownloadWidget(QWidget):
 
         self.start_button.setDisabled(True)
         self.cancel_button.setDisabled(False)
+        self.new_week_button.setDisabled(True)
         self.progress_bar.setRange(0,1)
 
         # check if Week folder exists in DL location, and if not, create it
@@ -318,6 +320,7 @@ class DownloadWidget(QWidget):
         if self.downloaded == self.to_download:
             self.start_button.setDisabled(False)
             self.cancel_button.setDisabled(True)
+            self.new_week_button.setDisabled(False)
             self.progress_bar.setValue(self.progress_bar.maximum())
     ###########################################################################
 
