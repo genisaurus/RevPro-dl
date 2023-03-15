@@ -219,7 +219,7 @@ class DownloadWidget(QWidget):
             # wait for the video player to load, then extract the URL. Add the recording item to the file tree
             WebDriverWait(self.driver,60).until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#recordingPlayer_html5_api")))
             recording_url = self.driver.find_element(By.CSS_SELECTOR, "#recordingPlayer_html5_api > source").get_attribute("ng-src")
-            recording_tree_item = QTreeWidgetItem([recording_item_str.replace(':', '_').replace('/', '_') + ".mp4", recording_url], 0)
+            recording_tree_item = QTreeWidgetItem(str(j) + "_" + [recording_item_str.replace(':', '-').replace('/', '-').replace(' ', '_') + ".mp4", recording_url], 0)
             day_tree_item.addChild(recording_tree_item)
         self.to_download += day_tree_item.childCount()
         self.to_download_label.setNum(self.to_download)
